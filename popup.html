@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpectreScope</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo-area">
+                <img src="icons/icon48.png" alt="SpectreScope Logo" class="logo">
+                <h1>SpectreScope</h1>
+            </div>
+            <button id="settingsBtn" class="settings-btn" aria-label="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon">
+                    <path d="M12 1.5a.75.75 0 01.75.75V3a.75.75 0 01-1.5 0V2.25A.75.75 0 0112 1.5zM12 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5.626 4.312a.75.75 0 01-.082 1.054l-1.373 1.002a.75.75 0 01-.977-1.267l1.373-1.002a.75.75 0 011.054.082zm12.748 0a.75.75 0 011.054-.082l1.373 1.002a.75.75 0 01-.977 1.267l-1.373-1.002a.75.75 0 01-.082-1.054zM2.25 12c0-.414.336-.75.75-.75H4.5a.75.75 0 010 1.5H3a.75.75 0 01-.75-.75zM19.5 12c0-.414.336-.75.75-.75H21a.75.75 0 010 1.5h-1.5a.75.75 0 01-.75-.75zM4.312 18.374a.75.75 0 011.054.082l1.002 1.373a.75.75 0 11-1.267.977l-1.002-1.373a.75.75 0 01.082-1.054zM18.374 18.374a.75.75 0 01-.082 1.054l1.002 1.373a.75.75 0 11-1.267.977l-1.002-1.373a.75.75 0 011.054-.082zM12 19.5a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-1.5a.75.75 0 01.75-.75z" />
+                </svg>
+            </button>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="steganography">Steganography</button>
+            <button class="tab-btn" data-tab="osint">OSINT</button>
+            <button class="tab-btn" data-tab="code">Code</button>
+            <button class="tab-btn" data-tab="ciphers">Ciphers</button>
+            <button class="tab-btn" data-tab="patterns">Patterns</button>
+        </nav>
+
+        <div id="tabContent" class="tab-content">
+            <div id="dashboard" class="tab-pane active">
+                <h2>Dashboard</h2>
+                <p>Welcome to SpectreScope! Your central hub for security insights.</p>
+                <div class="auto-discovery-section">
+                    <h3>Auto-Discovery Findings</h3>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="enableBackgroundScan">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Enable Background Scan</span>
+                    <div id="findingsList" class="findings-list">
+                        <p class="no-findings">No active findings yet.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="steganography" class="tab-pane">
+                <h2>Steganography</h2>
+                <p>Upload or link to an image/audio file for analysis.</p>
+                <div class="input-group">
+                    <input type="file" id="stegoFileInput" accept="image/*,audio/*">
+                    <label for="stegoFileInput" class="file-upload-label">Choose File</label>
+                    <span>or</span>
+                    <input type="text" id="stegoUrlInput" placeholder="Enter URL">
+                    <button id="stegoAnalyzeUrlBtn">Analyze URL</button>
+                </div>
+                <div class="stego-actions">
+                    <button id="analyzeLSB">Analyze LSB</button>
+                    <button id="extractMetadata">Extract Metadata</button>
+                    <button id="viewExifData">View EXIF Data</button>
+                </div>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="stegoResults"></pre>
+                </div>
+            </div>
+
+            <div id="osint" class="tab-pane">
+                <h2>OSINT Exploration</h2>
+                <p>Gather open-source intelligence.</p>
+                <div class="input-group">
+                    <input type="text" id="osintQuery" placeholder="Domain, IP, Email, Username...">
+                    <button id="osintSearchBtn">Search</button>
+                </div>
+                <div class="osint-quick-links">
+                    <button data-service="whois">Whois</button>
+                    <button data-service="virustotal">VirusTotal</button>
+                    <button data-service="shodan">Shodan</button>
+                    <button data-service="hibp">HaveIBeenPwned</button>
+                </div>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="osintResults"></pre>
+                </div>
+            </div>
+
+            <div id="code" class="tab-pane">
+                <h2>Source Code Investigation</h2>
+                <p>Analyze JavaScript and HTML source code.</p>
+                <div class="code-actions">
+                    <button id="inspectPageSource">Inspect Current Page Source</button>
+                    <button id="beautifyCode">Beautify</button>
+                    <button id="scanCode">Scan for Vulnerabilities</button>
+                </div>
+                <textarea id="codeEditor" placeholder="Paste code here or inspect current page..." rows="10"></textarea>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="codeResults"></pre>
+                </div>
+            </div>
+
+            <div id="ciphers" class="tab-pane">
+                <h2>Cipher Decryption</h2>
+                <p>Decode various ciphers and encodings.</p>
+                <div class="input-group">
+                    <textarea id="cipherInput" placeholder="Enter encoded text..." rows="5"></textarea>
+                </div>
+                <div class="cipher-controls">
+                    <select id="cipherType">
+                        <option value="auto">Auto-Detect</option>
+                        <option value="base64">Base64</option>
+                        <option value="hex">Hex</option>
+                        <option value="url">URL Encoding</option>
+                        <option value="rot13">ROT13</option>
+                        <option value="caesar">Caesar</option>
+                        <option value="atbash">Atbash</option>
+                        <option value="xor">XOR</option>
+                    </select>
+                    <input type="text" id="cipherKey" placeholder="Key (if applicable)">
+                    <button id="decodeBtn">Decode</button>
+                </div>
+                <div class="results-box">
+                    <h3>Decoded Output</h3>
+                    <pre id="cipherOutput"></pre>
+                </div>
+            </div>
+
+            <div id="patterns" class="tab-pane">
+                <h2>Pattern Recognition</h2>
+                <p>Identify common patterns in text.</p>
+                <div class="input-group">
+                    <textarea id="patternInput" placeholder="Paste text to scan..." rows="5"></textarea>
+                </div>
+                <div class="pattern-controls">
+                    <select id="patternType">
+                        <option value="email">Email Addresses</option>
+                        <option value="ip">IP Addresses</option>
+                        <option value="url">URLs</option>
+                        <option value="hash">Hashes (MD5, SHA)</option>
+                        <option value="api_key">API Keys</option>
+                        <option value="custom">Custom Regex</option>
+                    </select>
+                    <input type="text" id="customRegexInput" placeholder="Enter custom regex" style="display: none;">
+                    <button id="scanPatternsBtn">Scan</button>
+                </div>
+                <div class="results-box">
+                    <h3>Matches</h3>
+                    <pre id="patternResults"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="utils/ciphers.js"></script>
+    <script src="utils/patterns.js"></script>
+    <script src="utils/steganography.js"></script>
+    <script src="utils/code-analysis.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

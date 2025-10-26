@@ -1,0 +1,979 @@
+# SpectreScope Chrome Extension: Development Guide
+
+This document outlines the design and implementation steps for **SpectreScope**, a powerful Chrome extension for Steganography discovery and decoding, Pattern recognition, OSINT exploration, source code investigation, and cipher decryption.
+
+## Table of Contents
+
+1.  [Introduction](#1-introduction)
+2.  [Core Components & Architecture](#2-core-components--architecture)
+3.  [Feature Breakdown](#3-feature-breakdown)
+    *   [Steganography Discovery & Decoding](#steganography-discovery--decoding)
+    *   [Pattern Recognition](#pattern-recognition)
+    *   [OSINT Exploration](#osint-exploration)
+    *   [Source Code Investigation](#source-code-investigation)
+    *   [Cipher Decryption](#cipher-decryption)
+    *   [Auto-Discovery & Background Scanning](#auto-discovery--background-scanning)
+4.  [Project Setup & Initial Files](#4-project-setup--initial-files)
+    *   [File Structure](#file-structure)
+    *   [`manifest.json`](#manifestjson)
+    *   [Icons](#icons)
+    *   [`popup.html`](#popuphml)
+    *   [`popup.css`](#popupcss)
+    *   [`popup.js`](#popupjs)
+    *   [`background.js`](#backgroundjs)
+    *   [`content.js`](#contentjs)
+5.  [Loading the Extension in Chrome](#5-loading-the-extension-in-chrome)
+6.  [Next Steps & Feature Implementation](#6-next-steps--feature-implementation)
+
+---
+
+## 1. Introduction
+
+SpectreScope aims to be a comprehensive browser-based tool for digital forensics and security analysis. It will provide a simple, intuitive interface while leveraging a powerful backend to perform complex tasks across various domains.
+
+## 2. Core Components & Architecture
+
+The extension will be built upon the standard Chrome Extension Manifest V3 architecture:
+
+*   **Popup UI (HTML/CSS/JS):** The primary user interface, displayed when the extension icon is clicked. It will feature a tabbed layout for different functionalities.
+*   **Background Service Worker (`background.js`):** A persistent script that handles events, manages state, orchestrates complex operations (like `webRequest` interception), and communicates with other parts of the extension.
+*   **Content Scripts (`content.js`):** Scripts injected into web pages to interact with the DOM, extract data, or highlight findings directly on the page.
+*   **Backend Logic (JS/WASM):** JavaScript modules (and potentially WebAssembly for performance-critical tasks) implementing the core algorithms for steganography, pattern matching, cryptography, etc.
+*   **Chrome Extension APIs:** Utilized for inter-component communication, storage, tab management, and network request interception.
+
+```
++-----------------------------------+
+|          Chrome Browser           |
+|                                   |
+|  +-----------------------------+  |
+|  |       Extension Icon        |  |
+|  +--------------+--------------+  |
+|                 |                 |
+|                 v                 |
+|  +-----------------------------+  |
+|  |        Popup UI (HTML/CSS/JS) |  |
+|  |  - Tabs: Stego, Pattern, OSINT,|  |
+|  |    Code, Cipher, Dashboard    |  |
+|  |  - Input/Output areas         |  |
+|  |  - Action Buttons             |  |
+|  +--------------+--------------+  |
+|                 |                 |
+|                 v                 |
+|  +-----------------------------+  |
+|  |     Background Script (JS)    |  |
+|  |  - Event Listeners (messages) |  |
+|  |  - State Management           |  |
+|  |  - API Orchestration          |  |
+|  |  - Long-running tasks         |  |
+|  |  - WebRequest Interception    |  |
+|  +--------------+--------------+  |
+|                 |                 |
+|                 v                 |
+|  +-----------------------------+  |
+|  |        Backend Logic          |  |
+|  |  (JS Libraries / WASM Modules)|  |
+|  |  - Steganography Engine       |  |
+|  |  - Regex/Pattern Engine       |  |
+|  |  - OSINT Integrations         |  |
+|  |  - Code Parsers/Deobfuscators |  |
+|  |  - Cipher Algorithms          |  |
+|  +-----------------------------+  |
+|                 ^                 |
+|                 |                 |
+|  +-----------------------------+  |
+|  |     Content Scripts (JS)      |  |
+|  |  - DOM Interaction            |  |
+|  |  - Data Extraction (images, text)|  |
+|  |  - Context Menu Integration   |  |
+|  +-----------------------------+  |
+|                                   |
++-----------------------------------+
+```
+
+## 3. Feature Breakdown
+
+### Steganography Discovery & Decoding
+
+*   **UI:** Drag-and-drop/URL input for images/audio, buttons for LSB analysis, metadata extraction, EXIF data viewing. Results displayed in a dedicated area.
+*   **Backend:** LSB analysis (pixel manipulation), EXIF/metadata parsing, basic file type carving, entropy calculation.
+*   **Auto-Discovery:**
+    *   **Content Script:** Identify `<img>` and `<audio>` tags, send URLs to background.
+    *   **Background (`webRequest`):** Intercept image/audio requests.
+    *   **Analysis:** Heuristics (file size vs. displayed size), quick metadata/EXIF checks, LSB sampling, entropy calculation.
+    *   **Reporting:** Notify popup of suspicious files.
+
+### Pattern Recognition
+
+*   **UI:** Text input area, dropdown for predefined patterns (emails, IPs, hashes, API keys), custom regex input. Results highlighted/extracted.
+*   **Backend:** Robust regex engine, heuristic analysis, entropy calculation.
+*   **Auto-Discovery:**
+    *   **Content Script:** Scan visible text nodes and attributes on page load/mutation.
+    *   **Analysis:** Run predefined and user-defined regex patterns.
+    *   **Reporting:** Optionally highlight matches on the page, log to dashboard.
+
+### OSINT Exploration
+
+*   **UI:** Search bar for domains, IPs, emails, usernames. Quick links to external OSINT services (Whois, Shodan, VirusTotal, HaveIBeenPwned).
+*   **Backend:** API integrations (where ethical and feasible), basic DNS lookups.
+*   **Auto-Discovery (Passive):**
+    *   **Content Script:** Extract domains, IPs, emails from page content.
+    *   **Background (`webRequest`):** Monitor outgoing network requests.
+    *   **Analysis:** Domain/IP reputation checks (local cache or minimal API), geolocation, flagging known trackers/malware.
+    *   **Reporting:** Display suspicious entities in the dashboard.
+
+### Source Code Investigation
+
+*   **UI:** Code viewer (textarea), buttons to "Inspect Current Page Source," "Beautify," "Scan for Vulnerabilities."
+*   **Backend:** Fetching page source, JS beautification libraries, static analysis for common vulnerabilities (regex-based initially, potentially AST-based later), obfuscation detection.
+*   **Auto-Discovery:**
+    *   **Background (`webRequest`):** Intercept all JavaScript file requests (`.js`).
+    *   **Content Script:** Extract inline scripts from HTML.
+    *   **Analysis:** Obfuscation detection, scan for insecure coding patterns (`eval()`, `innerHTML` misuse, exposed API keys), identify external libraries for known vulnerabilities.
+    *   **Reporting:** Flag suspicious scripts, potential vulnerabilities, or highly obfuscated code.
+
+### Cipher Decryption
+
+*   **UI:** Input/output text areas, dropdown for cipher types (Base64, Hex, URL, ROT13, Caesar, Atbash, XOR), key input.
+*   **Backend:** Implementations for various cipher algorithms, frequency analysis for classical ciphers, encoding/decoding libraries.
+*   **Auto-Discovery:**
+    *   **Content Script:** Scan text content for strings exhibiting characteristics of encoded data.
+    *   **Heuristics:** Look for Base64, Hex, URL encoding patterns, analyze character distribution.
+    *   **Background:** Attempt to decode suspicious strings with common ciphers.
+    *   **Reporting:** Present successful decodes with original text and cipher type.
+
+### Auto-Discovery & Background Scanning
+
+*   **`chrome.webRequest` API:** Intercepts network requests (images, scripts) for background analysis.
+*   **Content Scripts:** Observe DOM for text patterns, image/audio tags, and inline scripts.
+*   **`chrome.storage`:** Persist user's "Enable Background Scan" setting.
+*   **Dashboard Tab:** Centralized display of all auto-discovered findings.
+*   **Extension Badge:** Indicates the number of new findings.
+
+## 4. Project Setup & Initial Files
+
+Create a new directory named `SpectreScope_Extension`.
+
+### File Structure
+
+```
+SpectreScope_Extension/
+├── manifest.json
+├── popup.html
+├── popup.css
+├── popup.js
+├── background.js
+├── content.js
+├── icons/
+│   ├── icon16.png
+│   ├── icon48.png
+│   └── icon128.png
+```
+
+### `manifest.json`
+
+This file defines the extension's properties and permissions.
+
+```json
+{
+  "manifest_version": 3,
+  "name": "SpectreScope",
+  "version": "1.0",
+  "description": "A powerful browser extension for Steganography, Pattern Recognition, OSINT, Source Code analysis, and Cipher Decryption.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "webRequest",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+```
+
+### Icons
+
+Create (or use placeholders) for the extension icons in the `icons/` directory.
+*   `icons/icon16.png` (16x16 pixels)
+*   `icons/icon48.png` (48x48 pixels)
+*   `icons/icon128.png` (128x128 pixels)
+
+### `popup.html`
+
+The HTML structure for the extension's popup interface.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpectreScope</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo-area">
+                <img src="icons/icon48.png" alt="SpectreScope Logo" class="logo">
+                <h1>SpectreScope</h1>
+            </div>
+            <button id="settingsBtn" class="settings-btn" aria-label="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon">
+                    <path d="M12 1.5a.75.75 0 01.75.75V3a.75.75 0 01-1.5 0V2.25A.75.75 0 0112 1.5zM12 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM5.626 4.312a.75.75 0 01-.082 1.054l-1.373 1.002a.75.75 0 01-.977-1.267l1.373-1.002a.75.75 0 011.054.082zm12.748 0a.75.75 0 011.054-.082l1.373 1.002a.75.75 0 01-.977 1.267l-1.373-1.002a.75.75 0 01-.082-1.054zM2.25 12c0-.414.336-.75.75-.75H4.5a.75.75 0 010 1.5H3a.75.75 0 01-.75-.75zM19.5 12c0-.414.336-.75.75-.75H21a.75.75 0 010 1.5h-1.5a.75.75 0 01-.75-.75zM4.312 18.374a.75.75 0 011.054.082l1.002 1.373a.75.75 0 11-1.267.977l-1.002-1.373a.75.75 0 01.082-1.054zM18.374 18.374a.75.75 0 01-.082 1.054l1.002 1.373a.75.75 0 11-1.267.977l-1.002-1.373a.75.75 0 011.054-.082zM12 19.5a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-1.5a.75.75 0 01.75-.75z" />
+                </svg>
+            </button>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="steganography">Steganography</button>
+            <button class="tab-btn" data-tab="osint">OSINT</button>
+            <button class="tab-btn" data-tab="code">Code</button>
+            <button class="tab-btn" data-tab="ciphers">Ciphers</button>
+            <button class="tab-btn" data-tab="patterns">Patterns</button>
+        </nav>
+
+        <div id="tabContent" class="tab-content">
+            <div id="dashboard" class="tab-pane active">
+                <h2>Dashboard</h2>
+                <p>Welcome to SpectreScope! Your central hub for security insights.</p>
+                <div class="auto-discovery-section">
+                    <h3>Auto-Discovery Findings</h3>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="enableBackgroundScan">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Enable Background Scan</span>
+                    <div id="findingsList" class="findings-list">
+                        <!-- Auto-discovery findings will be injected here -->
+                        <p class="no-findings">No active findings yet.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="steganography" class="tab-pane">
+                <h2>Steganography</h2>
+                <p>Upload or link to an image/audio file for analysis.</p>
+                <div class="input-group">
+                    <input type="file" id="stegoFileInput" accept="image/*,audio/*">
+                    <label for="stegoFileInput" class="file-upload-label">Choose File</label>
+                    <span>or</span>
+                    <input type="text" id="stegoUrlInput" placeholder="Enter URL">
+                    <button id="stegoAnalyzeUrlBtn">Analyze URL</button>
+                </div>
+                <div class="stego-actions">
+                    <button id="analyzeLSB">Analyze LSB</button>
+                    <button id="extractMetadata">Extract Metadata</button>
+                    <button id="viewExifData">View EXIF Data</button>
+                </div>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="stegoResults"></pre>
+                </div>
+            </div>
+
+            <div id="osint" class="tab-pane">
+                <h2>OSINT Exploration</h2>
+                <p>Gather open-source intelligence.</p>
+                <div class="input-group">
+                    <input type="text" id="osintQuery" placeholder="Domain, IP, Email, Username...">
+                    <button id="osintSearchBtn">Search</button>
+                </div>
+                <div class="osint-quick-links">
+                    <button data-service="whois">Whois</button>
+                    <button data-service="virustotal">VirusTotal</button>
+                    <button data-service="shodan">Shodan</button>
+                    <button data-service="hibp">HaveIBeenPwned</button>
+                </div>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="osintResults"></pre>
+                </div>
+            </div>
+
+            <div id="code" class="tab-pane">
+                <h2>Source Code Investigation</h2>
+                <p>Analyze JavaScript and HTML source code.</p>
+                <div class="code-actions">
+                    <button id="inspectPageSource">Inspect Current Page Source</button>
+                    <button id="beautifyCode">Beautify</button>
+                    <button id="scanCode">Scan for Vulnerabilities</button>
+                </div>
+                <textarea id="codeEditor" placeholder="Paste code here or inspect current page..." rows="10"></textarea>
+                <div class="results-box">
+                    <h3>Results</h3>
+                    <pre id="codeResults"></pre>
+                </div>
+            </div>
+
+            <div id="ciphers" class="tab-pane">
+                <h2>Cipher Decryption</h2>
+                <p>Decode various ciphers and encodings.</p>
+                <div class="input-group">
+                    <textarea id="cipherInput" placeholder="Enter encoded text..." rows="5"></textarea>
+                </div>
+                <div class="cipher-controls">
+                    <select id="cipherType">
+                        <option value="auto">Auto-Detect</option>
+                        <option value="base64">Base64</option>
+                        <option value="hex">Hex</option>
+                        <option value="url">URL Encoding</option>
+                        <option value="rot13">ROT13</option>
+                        <option value="caesar">Caesar</option>
+                        <option value="atbash">Atbash</option>
+                        <option value="xor">XOR</option>
+                    </select>
+                    <input type="text" id="cipherKey" placeholder="Key (if applicable)">
+                    <button id="decodeBtn">Decode</button>
+                </div>
+                <div class="results-box">
+                    <h3>Decoded Output</h3>
+                    <pre id="cipherOutput"></pre>
+                </div>
+            </div>
+
+            <div id="patterns" class="tab-pane">
+                <h2>Pattern Recognition</h2>
+                <p>Identify common patterns in text.</p>
+                <div class="input-group">
+                    <textarea id="patternInput" placeholder="Paste text to scan..." rows="5"></textarea>
+                </div>
+                <div class="pattern-controls">
+                    <select id="patternType">
+                        <option value="email">Email Addresses</option>
+                        <option value="ip">IP Addresses</option>
+                        <option value="url">URLs</option>
+                        <option value="hash">Hashes (MD5, SHA)</option>
+                        <option value="api_key">API Keys</option>
+                        <option value="custom">Custom Regex</option>
+                    </select>
+                    <input type="text" id="customRegexInput" placeholder="Enter custom regex" style="display: none;">
+                    <button id="scanPatternsBtn">Scan</button>
+                </div>
+                <div class="results-box">
+                    <h3>Matches</h3>
+                    <pre id="patternResults"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
+```
+
+### `popup.css`
+
+Styling for the `popup.html` to achieve a dark, sleek interface.
+
+```css
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    width: 400px; /* Fixed width for the popup */
+    background-color: #282c34; /* Dark background */
+    color: #abb2bf; /* Light text */
+    overflow-x: hidden;
+}
+
+.container {
+    padding: 15px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #3e4451;
+    padding-bottom: 10px;
+}
+
+.logo-area {
+    display: flex;
+    align-items: center;
+}
+
+.logo {
+    width: 32px;
+    height: 32px;
+    margin-right: 10px;
+}
+
+h1 {
+    font-size: 1.5em;
+    margin: 0;
+    color: #61afef; /* Blueish color for title */
+}
+
+.settings-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    color: #abb2bf;
+}
+
+.settings-btn .icon {
+    width: 24px;
+    height: 24px;
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap; /* Allow tabs to wrap if too many */
+    margin-bottom: 20px;
+    border-bottom: 1px solid #3e4451;
+}
+
+.tab-btn {
+    background-color: #3e4451;
+    color: #abb2bf;
+    border: none;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 0.9em;
+    border-radius: 5px 5px 0 0;
+    margin-right: 5px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab-btn:hover {
+    background-color: #4b5263;
+}
+
+.tab-btn.active {
+    background-color: #282c34;
+    color: #61afef;
+    border-bottom: 2px solid #61afef;
+}
+
+.tab-content .tab-pane {
+    display: none;
+    padding-top: 15px;
+}
+
+.tab-content .tab-pane.active {
+    display: block;
+}
+
+h2 {
+    color: #c678dd; /* Purpleish color for section titles */
+    font-size: 1.2em;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+p {
+    font-size: 0.9em;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    align-items: center;
+}
+
+input[type="text"],
+textarea,
+select {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #3e4451;
+    border-radius: 4px;
+    background-color: #3e4451;
+    color: #abb2bf;
+    font-size: 0.9em;
+}
+
+input[type="text"]::placeholder,
+textarea::placeholder {
+    color: #636b7a;
+}
+
+button {
+    background-color: #61afef;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+button:hover {
+    background-color: #529edc;
+}
+
+.file-upload-label {
+    background-color: #98c379; /* Greenish for file upload */
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+    white-space: nowrap; /* Prevent text wrap */
+}
+
+.file-upload-label:hover {
+    background-color: #82b166;
+}
+
+input[type="file"] {
+    display: none; /* Hide default file input */
+}
+
+.stego-actions, .osint-quick-links, .code-actions, .cipher-controls, .pattern-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.results-box {
+    background-color: #3e4451;
+    border: 1px solid #4b5263;
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 15px;
+}
+
+.results-box h3 {
+    color: #e6c07b; /* Yellowish for results title */
+    font-size: 1em;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.85em;
+    color: #abb2bf;
+    margin: 0;
+}
+
+/* Toggle Switch for Background Scan */
+.auto-discovery-section {
+    background-color: #3e4451;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.auto-discovery-section h3 {
+    color: #e06c75; /* Reddish for important section */
+    margin-top: 0;
+    margin-bottom: 5px;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    margin-right: 10px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #636b7a;
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #98c379;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #98c379;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 0.9em;
+    color: #abb2bf;
+}
+
+.findings-list {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #4b5263;
+    border-radius: 4px;
+    padding: 5px;
+    background-color: #282c34;
+}
+
+.findings-list .no-findings {
+    text-align: center;
+    color: #636b7a;
+    font-style: italic;
+}
+
+/* Specific styling for the custom regex input */
+#customRegexInput {
+    flex-grow: 2; /* Give it more space */
+}
+```
+
+### `popup.js`
+
+The JavaScript for handling UI interactions in the popup.
+
+```javascript
+document.addEventListener('DOMContentLoaded', () => {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    const enableBackgroundScanToggle = document.getElementById('enableBackgroundScan');
+    const findingsList = document.getElementById('findingsList');
+    const customRegexInput = document.getElementById('customRegexInput');
+    const patternTypeSelect = document.getElementById('patternType');
+
+    // --- Tab Switching Logic ---
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            document.getElementById(button.dataset.tab).classList.add('active');
+        });
+    });
+
+    // --- Background Scan Toggle Logic ---
+    // Load saved state
+    chrome.storage.sync.get('backgroundScanEnabled', (data) => {
+        enableBackgroundScanToggle.checked = data.backgroundScanEnabled !== false; // Default to true
+        // Inform background script about the initial state
+        chrome.runtime.sendMessage({
+            action: "toggleBackgroundScan",
+            enabled: enableBackgroundScanToggle.checked
+        });
+    });
+
+    // Save state on change
+    enableBackgroundScanToggle.addEventListener('change', () => {
+        const isEnabled = enableBackgroundScanToggle.checked;
+        chrome.storage.sync.set({ backgroundScanEnabled: isEnabled }, () => {
+            console.log('Background scan enabled:', isEnabled);
+            // Inform background script
+            chrome.runtime.sendMessage({
+                action: "toggleBackgroundScan",
+                enabled: isEnabled
+            });
+        });
+    });
+
+    // --- Custom Regex Input Visibility ---
+    patternTypeSelect.addEventListener('change', () => {
+        if (patternTypeSelect.value === 'custom') {
+            customRegexInput.style.display = 'block';
+        } else {
+            customRegexInput.style.display = 'none';
+        }
+    });
+
+    // --- Placeholder for displaying findings ---
+    function displayFinding(finding) {
+        const findingElement = document.createElement('div');
+        findingElement.classList.add('finding-item'); // Add a class for styling
+        findingElement.innerHTML = `
+            <p><strong>${finding.type}:</strong> ${finding.message}</p>
+            <small>${finding.source}</small>
+            ${finding.action ? `<button data-action="${finding.action}" data-payload="${finding.payload}">Investigate</button>` : ''}
+        `;
+        // Prepend to show newest findings first
+        if (findingsList.querySelector('.no-findings')) {
+            findingsList.innerHTML = ''; // Remove "No findings yet"
+        }
+        findingsList.prepend(findingElement);
+    }
+
+    // --- Event Listeners for main features (placeholders for now) ---
+
+    // Steganography
+    document.getElementById('stegoAnalyzeUrlBtn').addEventListener('click', () => {
+        const url = document.getElementById('stegoUrlInput').value;
+        if (url) {
+            document.getElementById('stegoResults').textContent = `Analyzing URL: ${url}... (Not yet implemented)`;
+            // TODO: Send message to background script for analysis
+        }
+    });
+    // Add more listeners for file input, LSB, metadata, exif
+
+    // OSINT
+    document.getElementById('osintSearchBtn').addEventListener('click', () => {
+        const query = document.getElementById('osintQuery').value;
+        if (query) {
+            document.getElementById('osintResults').textContent = `Searching for: ${query}... (Not yet implemented)`;
+            // TODO: Send message to background script for OSINT lookup
+        }
+    });
+    document.querySelectorAll('.osint-quick-links button').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const service = e.target.dataset.service;
+            const query = document.getElementById('osintQuery').value;
+            if (query) {
+                // TODO: Open new tab with service + query
+                document.getElementById('osintResults').textContent = `Opening ${service} for ${query}... (Not yet implemented)`;
+            }
+        });
+    });
+
+    // Code
+    document.getElementById('inspectPageSource').addEventListener('click', () => {
+        document.getElementById('codeResults').textContent = `Inspecting current page source... (Not yet implemented)`;
+        // TODO: Send message to background script to get current tab's source
+    });
+    // Add listeners for beautify, scan
+
+    // Ciphers
+    document.getElementById('decodeBtn').addEventListener('click', () => {
+        const inputText = document.getElementById('cipherInput').value;
+        const cipherType = document.getElementById('cipherType').value;
+        const cipherKey = document.getElementById('cipherKey').value;
+        if (inputText) {
+            document.getElementById('cipherOutput').textContent = `Decoding "${inputText}" with ${cipherType} (key: ${cipherKey})... (Not yet implemented)`;
+            // TODO: Send message to background script for decoding
+        }
+    });
+
+    // Patterns
+    document.getElementById('scanPatternsBtn').addEventListener('click', () => {
+        const inputText = document.getElementById('patternInput').value;
+        const patternType = document.getElementById('patternType').value;
+        const customRegex = document.getElementById('customRegexInput').value;
+        if (inputText) {
+            document.getElementById('patternResults').textContent = `Scanning for ${patternType} in "${inputText}" (regex: ${customRegex})... (Not yet implemented)`;
+            // TODO: Send message to background script for pattern scanning
+        }
+    });
+
+    // --- Message Listener from Background Script ---
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === "newFinding") {
+            displayFinding(request.finding);
+            // Optionally update badge text
+            chrome.action.getBadgeText({}, (text) => {
+                const currentCount = parseInt(text || '0', 10);
+                chrome.action.setBadgeText({ text: (currentCount + 1).toString() });
+            });
+        }
+        sendResponse({ status: "received" });
+    });
+});
+```
+
+### `background.js`
+
+The service worker script that runs in the background. Handles `webRequest` and inter-component communication.
+
+```javascript
+let backgroundScanEnabled = true; // Default state
+
+// Load initial state from storage
+chrome.storage.sync.get('backgroundScanEnabled', (data) => {
+    if (data.backgroundScanEnabled !== undefined) {
+        backgroundScanEnabled = data.backgroundScanEnabled;
+    }
+    console.log('Background scan initialized to:', backgroundScanEnabled);
+    // Setup listeners immediately if enabled
+    if (backgroundScanEnabled) {
+        setupWebRequestListeners();
+    }
+});
+
+// Listener for messages from popup or content scripts
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "toggleBackgroundScan") {
+        backgroundScanEnabled = request.enabled;
+        console.log('Background scan toggled to:', backgroundScanEnabled);
+        if (backgroundScanEnabled) {
+            setupWebRequestListeners();
+        } else {
+            removeWebRequestListeners();
+        }
+        sendResponse({ status: "ok" });
+    }
+    // Add more message handlers for other features (e.g., "analyzeImage", "performOSINT")
+    // For now, just log them.
+    console.log("Message received in background:", request);
+    sendResponse({ status: "received" });
+});
+
+// --- Web Request Listener Setup ---
+function handleWebRequest(details) {
+    if (!backgroundScanEnabled) {
+        return; // Don't process if disabled
+    }
+
+    // Basic example: Log image requests
+    if (details.type === "image" && details.url.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+        console.log("Intercepted image request:", details.url);
+        // In a real scenario, you'd fetch the image, analyze it, and then notify the popup.
+        // For now, let's simulate a finding.
+        const finding = {
+            type: "Steganography",
+            message: `Image intercepted: ${details.url.split('/').pop()}`,
+            source: details.url,
+            action: "viewStego" // Action to open steganography tab
+        };
+        // Send finding to the popup
+        chrome.runtime.sendMessage({ action: "newFinding", finding: finding });
+    }
+
+    // Basic example: Log script requests
+    if (details.type === "script" && details.url.endsWith(".js")) {
+        console.log("Intercepted script request:", details.url);
+        // Simulate a finding for a suspicious script
+        if (details.url.includes("malicious") || details.url.includes("obfuscated")) {
+             const finding = {
+                type: "Code",
+                message: `Suspicious script intercepted: ${details.url.split('/').pop()}`,
+                source: details.url,
+                action: "viewCode"
+            };
+            chrome.runtime.sendMessage({ action: "newFinding", finding: finding });
+        }
+    }
+}
+
+function setupWebRequestListeners() {
+    console.log("Setting up webRequest listeners.");
+    // Ensure listeners are not duplicated
+    removeWebRequestListeners(); // Remove existing to prevent duplicates
+
+    chrome.webRequest.onResponseStarted.addListener(
+        handleWebRequest,
+        { urls: ["<all_urls>"], types: ["image", "script"] }, // Filter for image and script types
+        ["responseHeaders"] // Needed to access some details
+    );
+    // Add more listeners as needed for other webRequest events (e.g., onBeforeRequest, onCompleted)
+}
+
+function removeWebRequestListeners() {
+    console.log("Removing webRequest listeners.");
+    if (chrome.webRequest.onResponseStarted.hasListener(handleWebRequest)) {
+        chrome.webRequest.onResponseStarted.removeListener(handleWebRequest);
+    }
+}
+
+// Initial setup when the service worker starts
+// The chrome.storage.sync.get callback will handle the actual setup based on saved state.
+```
+
+### `content.js`
+
+This script is injected into every web page.
+
+```javascript
+console.log("SpectreScope content script loaded on:", window.location.href);
+
+// Example: Send page title to background script
+chrome.runtime.sendMessage({
+    action: "pageLoaded",
+    url: window.location.href,
+    title: document.title
+});
+
+// More advanced content script logic will go here:
+// - DOM scanning for patterns
+// - Extracting image/audio URLs for background analysis
+// - Highlighting findings on the page
+```
+
+## 5. Loading the Extension in Chrome
+
+1.  **Open Chrome:** Launch your Google Chrome browser.
+2.  **Go to Extensions:** Type `chrome://extensions` into the address bar and press Enter.
+3.  **Enable Developer Mode:** In the top-right corner of the Extensions page, toggle on the "Developer mode" switch.
+4.  **Load Unpacked:** Click the "Load unpacked" button that appears on the top-left.
+5.  **Select Directory:** Navigate to and select your `SpectreScope_Extension` directory (the parent folder containing `manifest.json`).
+6.  **Verify:** The SpectreScope extension should now appear in your list of extensions, and its icon should be visible in your browser toolbar. Click the icon to open the popup.
+
+## 6. Next Steps & Feature Implementation
+
+With the foundational structure in place, we can now proceed to implement the core logic for each feature. We'll tackle them one by one, focusing on getting a basic functional version of each before refining.
+
+**Suggested Order of Implementation (prioritizing core functionality and auto-discovery):**
+
+1.  **Steganography:**
+    *   Implement LSB extraction for image files.
+    *   Integrate an EXIF data parser.
+    *   Enhance `webRequest` listener in `background.js` to actually fetch and analyze intercepted images.
+2.  **Pattern Recognition:**
+    *   Implement common regex patterns (IPs, emails, hashes) in `popup.js` or a utility script.
+    *   Create a function in `content.js` to scan the DOM for these patterns and send findings to `background.js`.
+3.  **Cipher Decryption:**
+    *   Implement basic decoders (Base64, Hex, ROT13) in a utility script.
+    *   Add logic to `popup.js` to send text to `background.js` for decoding.
+4.  **Source Code Investigation:**
+    *   Implement a function to fetch the current tab's source code.
+    *   Integrate a JavaScript beautifier.
+    *   Add basic regex-based vulnerability scanning.
+5.  **OSINT Exploration:**
+    *   Implement opening new tabs with pre-filled search queries for external services.
+    *   (Advanced) Consider integrating with public APIs if ethical and manageable (e.g., `whois` lookup).
+
+Which feature would you like to make fully functional first?
