@@ -190,7 +190,7 @@ This tool is designed for security research, digital forensics, and OSINT invest
 ## Credits
 
 Developed as a comprehensive security analysis toolkit for browser-based investigations.
-
+Code by Claude-Code
 ---
 
 **Version**: 1.0
